@@ -8,8 +8,10 @@ nextflow run nf-core/rnaseq \
     -revision 3.12.0 \
     -profile singularity \
     -w data/nextflow_wd \
-    --fasta /home/projects/cu_10181/data/_reference/macaca_fascicularis/Macaca_fascicularis.Macaca_fascicularis_6.0.dna_rm.toplevel.fa.gz \
-    --gtf /home/projects/cu_10181/data/_reference/macaca_fascicularis/Macaca_fascicularis.Macaca_fascicularis_6.0.109.gtf.gz \
+    --trimmer fastp \
+    --pseudo_aligner salmon \
+    --fasta /home/projects/cu_10181/data/_reference/mus_musculus/Mus_musculus.GRCm39.dna.primary_assembly.fa \
+    --gtf /home/projects/cu_10181/data/_reference/mus_musculus/Mus_musculus.GRCm39.dna.primary_assembly.fa \
     --input data/nextflow_input.csv \
     --outdir data/nextflow_outputdir \
     --max_cpus 40 \
@@ -18,8 +20,5 @@ nextflow run nf-core/rnaseq \
 
 # The job submission code to Computerome.
 
-# qsub -W group_list=ku_00216 -A ku_00216 -l nodes=1:thinnode:ppn=40,mem=175gb,walltime=120:00:00 /home/projects/cu_10181/people/tuhu/PAXgene/analysis/0_RNA_SEQ_MAPPING.sh
+# qsub -W group_list=ku_00216 -A ku_00216 -l nodes=1:thinnode:ppn=40,mem=175gb,walltime=120:00:00 /home/projects/cu_10181/people/tuhu/kelvin_collaboration/analysis/1_nfcore_rnaseq_mapping.sh
 
-# The job failed (CPU disconnects from RAM). The code below is for restarting from where failed.
-
-# nextflow run nf-core/rnaseq -revision 3.12.0 -profile singularity -w data/nextflow_wd --fasta /home/projects/cu_10181/data/_reference/macaca_fascicularis/Macaca_fascicularis.Macaca_fascicularis_6.0.dna_rm.toplevel.fa.gz --gtf /home/projects/cu_10181/data/_reference/macaca_fascicularis/Macaca_fascicularis.Macaca_fascicularis_6.0.109.gtf.gz --input data/nextflow_input.csv --outdir data/nextflow_outputdir --max_cpus 40 --max_memory 170GB -resume b6faa4dd-eba5-4c7b-8c33-456656b6ff03
