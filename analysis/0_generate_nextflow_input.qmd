@@ -1,0 +1,27 @@
+---
+title: "Generate nextflow input"
+author: "Tu Hu"
+editor: visual
+---
+
+```{r}
+library(dplyr)
+library(stringr)
+library(tibble)
+fastq <- list.files("../data/fastq/", pattern = "*.fq.gz$")
+
+# nextflow needs a samplesheet with the following columns:
+# sample, fastq_1, fastq_2, strandedness
+
+wd <- getwd() %>% dirname() # get the parent directory of wd
+
+samplesheet <- 
+  tibble(
+    sample = fastq %>% str_extract("\\d{1,2}A") %>% unique(),
+    fastq_1 = file.path(wd, "data", "fastq", paste0(sample, "_1.fq.gz")),
+    fastq_2 = file.path(wd, "data", "fastq", paste0(sample, "_2.fq.gz")),
+    strandedness = "auto"
+  )
+
+readr::write_csv(samplesheet, "../data/nextflow_input.csv")
+```
