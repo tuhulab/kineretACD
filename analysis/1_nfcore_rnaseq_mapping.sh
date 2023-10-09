@@ -11,7 +11,7 @@ nextflow run nf-core/rnaseq \
     --trimmer fastp \
     --pseudo_aligner salmon \
     --fasta /home/projects/cu_10181/data/_reference/mus_musculus/Mus_musculus.GRCm39.dna.primary_assembly.fa \
-    --gtf /home/projects/cu_10181/data/_reference/mus_musculus/Mus_musculus.GRCm39.dna.primary_assembly.fa \
+    --gtf /home/projects/cu_10181/data/_reference/mus_musculus/Mus_musculus.GRCm39.109.gtf \
     --input data/nextflow_input.csv \
     --outdir data/nextflow_outputdir \
     --max_cpus 40 \
