@@ -47,3 +47,9 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# quarto
+analysis/_site/
+analysis/_site/0_data_preprocessing.html
+analysis/_site/search.json
+analysis/_site/index.html
