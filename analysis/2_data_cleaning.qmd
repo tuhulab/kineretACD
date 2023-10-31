@@ -1,0 +1,42 @@
+---
+title: "data cleaning"
+editor: visual
+---
+
+```{r load libraries}
+suppressPackageStartupMessages(
+  {
+    library(dplyr)
+    library(tidybulk)
+    library(tidySummarizedExperiment)
+    library(ggplot2)
+  }
+)
+```
+
+```{r load data}
+se <- readRDS("../data/se.rds")
+se_abundant <- se %>% identify_abundant()
+se_abundant_scale <- se_abundant %>% scale_abundance()
+```
+
+```{r}
+se_PCA <- se_abundant_scale %>% 
+  reduce_dimensions(method = "PCA", top = 1000)
+```
+
+```{r}
+se_PCA %>% pivot_sample() %>% 
+  ggplot(aes(x = PC1, y = PC2, color = condition)) +
+  geom_text(aes(label = timepoint)) +
+  theme_bw() +
+  coord_equal() 
+```
+
+**D7: treatment vs. Control** (Anakinra vs. PBS)
+
+D14: treatment vs., control (Anakinra vs. PBS - late)
+
+Control d14 vs. d7 (Effect of sensitize )
+
+Treatment d14 vs. d7

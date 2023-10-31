@@ -1,0 +1,143 @@
+---
+title: "Data sanity check and QC"
+author: "Tu Hu"
+editor: visual
+---
+
+## Load library
+
+```{r}
+#| message: False 
+library(SummarizedExperiment)
+library(dplyr)
+library(stringr)
+
+count <- readr::read_tsv("../data/salmon.merged.gene_counts.tsv")
+colnames(count) <- colnames(count) %>% str_remove("(?<=X\\d{1,2})A")
+count
+```
+
+## Check count data
+
+### Duplicated ensemble ID
+
+```{r}
+count$gene_id %>% duplicated() %>% sum()
+```
+
+### Duplicated gene name
+
+```{r}
+count$gene_name %>% duplicated() %>% sum()
+```
+
+## Use biomaRt to retrieve gene information
+
+```{r gene data}
+gene_data <- 
+  runonce::save_run(
+    {
+      library(biomaRt)
+      ensembl <- useEnsembl(biomart = "genes")
+      ensembl <- useDataset("mmusculus_gene_ensembl", ensembl)
+      gene_info <- 
+        getBM(
+          attributes = c("ensembl_gene_id", "external_gene_name",
+                         "description", "gene_biotype"),
+          mart = ensembl)
+      gene_info <- gene_info %>% as_tibble()
+      gene_info
+    }, "../data/gene_data.rds"
+  )
+
+```
+
+### Clean gene data
+
+```{r}
+gene_data_keep <- 
+  count[, 1:2] %>% 
+  left_join(gene_data, by = c("gene_id" = "ensembl_gene_id")) %>% 
+  filter(gene_biotype == "protein_coding") %>% 
+  group_by(gene_name) %>% 
+  tidyr::nest() %>% 
+  mutate(n = purrr::map_int(data, nrow)) %>% 
+  filter(n == 1) %>% 
+  tidyr::unnest() %>% 
+  ungroup()
+```
+
+```{r}
+count_pcoding <- 
+  count %>% filter(gene_id %in% gene_data_keep$gene_id)
+```
+
+## Construct SummerizedExperiment
+
+```{r}
+count_assay <- 
+  count_pcoding %>% tibble::column_to_rownames("gene_name") %>% 
+  dplyr::select(-gene_id) %>% 
+  as.matrix() %>% 
+  round()
+
+row_data <- 
+  tibble(gene_name = rownames(count_assay)) %>% 
+  left_join(gene_data_keep %>% dplyr::select(-gene_name), 
+            by = c("gene_name" = "external_gene_name")) %>% 
+  tibble::column_to_rownames("gene_name") %>% 
+  DataFrame()
+
+meta_data <- 
+  tibble(sample_name = colnames(count_assay)) %>% 
+  left_join(readxl::read_excel("../data/samplesheet.xlsx") %>% 
+  mutate(sample_name = paste0("X", sample),
+         timepoint = paste0("D", timepoint))) %>% 
+  select(-sample)
+
+se <- 
+  SummarizedExperiment(
+    assays = list(count = count_assay),
+    rowData = row_data,
+    colData = meta_data
+  )
+
+saveRDS(se, "../data/se.rds")
+```
+
+## Sanity check
+
+```{r}
+se %>% assay() %>% rowSums() %>% sort(T) %>% head(20)
+```
+
+```{r}
+(se %>% assay() %>% colSums())/1e6
+```
+
+```{r}
+hist((se %>% assay() %>% colSums())/1e6,
+     main = "Histogram of sequencing depth", 
+     xlab = "Million reads")
+```
+
+```{r}
+suppressPackageStartupMessages(
+  {
+    library(tidybulk)
+    library(tidySummarizedExperiment)
+    library(ggplot2)
+  }
+)
+se_abundant <- se %>% identify_abundant()
+se_abundant_scale <- se_abundant %>% scale_abundance()
+se_PCA <- se_abundant_scale %>% 
+  reduce_dimensions(method = "PCA", top = 1000)
+se_PCA %>% pivot_sample() %>% 
+  ggplot(aes(x = PC1, y = PC2, color = condition)) +
+  geom_text(aes(label = timepoint)) +
+  theme_bw() +
+  coord_equal()
+```
+
+In the PCA plot, the separation between treatment and control was observed at D7, and became very minor at D14. Additional, the intra-group variation is larger at D7 compared with D14.

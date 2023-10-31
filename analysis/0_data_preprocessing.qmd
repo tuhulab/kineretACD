@@ -1,0 +1,54 @@
+---
+title: "Generate nextflow input"
+author: "Tu Hu"
+editor: visual
+---
+
+```{r generate nextflow input samplesheet}
+library(dplyr)
+library(stringr)
+library(tibble)
+fastq <- list.files("../data/fastq/", pattern = "*.fq.gz$")
+
+# nextflow needs a samplesheet with the following columns:
+# sample, fastq_1, fastq_2, strandedness
+
+wd <- getwd() %>% dirname() # get the parent directory of wd
+
+samplesheet <- 
+  tibble(
+    sample = fastq %>% str_extract("\\d{1,2}A") %>% unique(),
+    fastq_1 = file.path(wd, "data", "fastq", paste0(sample, "_1.fq.gz")),
+    fastq_2 = file.path(wd, "data", "fastq", paste0(sample, "_2.fq.gz")),
+    strandedness = "auto"
+  )
+
+readr::write_csv(samplesheet, "../data/nextflow_input.csv")
+```
+
+```{bash mapping}
+#| eval: false
+
+#/bin/bash
+
+# This analysis is performed on Computerome 2.0 (The Danish National Life Science Supercomputing Center)
+
+cd /home/projects/cu_10181/people/tuhu/kelvin_collaboration
+module load jdk/18.0.2.1 nextflow/22.10.4 singularity/3.9.6 anaconda3/2023.03
+nextflow run nf-core/rnaseq \
+    -revision 3.12.0 \
+    -profile singularity \
+    -w data/nextflow_wd \
+    --trimmer fastp \
+    --pseudo_aligner salmon \
+    --fasta /home/projects/cu_10181/data/_reference/mus_musculus/Mus_musculus.GRCm39.dna.primary_assembly.fa \
+    --gtf /home/projects/cu_10181/data/_reference/mus_musculus/Mus_musculus.GRCm39.109.gtf \
+    --input data/nextflow_input.csv \
+    --outdir data/nextflow_outputdir \
+    --max_cpus 40 \
+    --max_memory 170GB
+
+# The job submission code to Computerome.
+
+# qsub -W group_list=ku_00216 -A ku_00216 -l nodes=1:thinnode:ppn=40,mem=175gb,walltime=120:00:00 /home/projects/cu_10181/people/tuhu/kelvin_collaboration/analysis/1_nfcore_rnaseq_mapping.sh
+```
