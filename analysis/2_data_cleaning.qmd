@@ -1,42 +1,349 @@
 ---
-title: "data cleaning"
+title: "data analysis"
 editor: visual
+format:
+  html: 
+    code-fold: true
 ---
 
+## PCA
+
 ```{r load libraries}
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
 suppressPackageStartupMessages(
   {
     library(dplyr)
     library(tidybulk)
     library(tidySummarizedExperiment)
     library(ggplot2)
+    library(kableExtra)
   }
 )
 ```
 
 ```{r load data}
 se <- readRDS("../data/se.rds")
+se$condition <- factor(se$condition, levels = c("control", "treatment"))
+se$timepoint <- factor(se$timepoint, levels = c("D7", "D14"))
+
 se_abundant <- se %>% identify_abundant()
 se_abundant_scale <- se_abundant %>% scale_abundance()
 ```
 
-```{r}
+```{r write out data to a text format}
+
+se_d14 <- se_abundant_scale[, se_abundant_scale$timepoint == "D14"]
+
+count <- se_d14 %>% assay(2) %>% round() %>% as_tibble(rownames = "gene_name")
+colnames(count)[2:9] <- se_d14 %>% colData() %>% as_tibble() %>% group_by(condition) %>%  mutate(sample_name = paste(condition, row_number(), sep = "_")) %>% pull(sample_name)
+
+readr::write_csv(count, "../data/count_d14.csv")
+```
+
+
+```{r pca-calculation}
 se_PCA <- se_abundant_scale %>% 
   reduce_dimensions(method = "PCA", top = 1000)
+
+
+pca <- attr(se_PCA, "internals")$PCA
+variance_explained <- pca$sdev^2 / sum(pca$sdev^2)
+```
+
+```{r pca-visualization}
+g_pca <- 
+  se_PCA %>% pivot_sample() %>% 
+  filter(timepoint == "D14") %>% 
+  ggplot(aes(x = PC1, y = PC2, color = condition)) +
+  geom_point() +
+  # geom_text(aes(label = timepoint)) +
+  theme_bw() +
+  coord_equal() +
+  xlab(paste("PC1", paste0("(", scales::percent(variance_explained[1]), ")"))) +
+  ylab(paste("PC2", paste0("(", scales::percent(variance_explained[2]), ")")))
+ggsave("figure/pca.svg", g_pca, dpi = 1200, width = 4, height = 4)
+```
+
+## Heatmap
+
+```{r}
+suppressPackageStartupMessages(library(ComplexHeatmap))
+
+# extract the marker genes
+se_PCA_var <- se_PCA[
+  c(
+  "Gzma",
+  "Gzmb",
+  "Gzmc",
+  "Prf1",
+  "Nkg7",
+
+  "Cxcl9",
+  "Cxcl10",
+  "Ifngr1",
+  "Ifngr2",
+  "Ifnar1",
+  "Ifnar2",
+  "Ifitm1",
+  "Ifitm2",
+  "Ifitm3",
+
+  "Rorc",
+  "Il17ra",
+  "Il17rb",
+  "Il17rc",
+  "Il17rd",
+  "Il17re",
+  "S100a8",
+  "S100a9",
+
+  "Il1r1",
+  "Il1rap",
+  "Il1r2",
+  "Il1b",
+
+  "Cd69",
+  "Itgae",
+  "Itga1",
+  "Runx1",
+  "Runx2",
+  "Runx3",
+
+  "Pparg",
+  "Fabp4",
+  "Fabp5",
+
+
+  "Ctla4",
+  "Cd274",
+  "Tox",
+  "Ptprc",
+  "Ptprcap"), se_PCA$timepoint == "D14"]
+
+# extract data heatmap
+m_heatmap <- assay(se_PCA_var, 2) %>% log1p()
+
+# perform Z-scale
+m_heatmap <- m_heatmap %>% t() %>% scale() %>% t()
+
+heatmap_annotation <- 
+  HeatmapAnnotation(
+    condition = se_PCA_var$condition,
+    # timepoint = se_PCA_var$timepoint,
+    col = list(condition = c(treatment = "#619CFF",
+                             control = "#F8766D"))
+  )
+
+heatmap <- 
+  ComplexHeatmap::Heatmap(
+    m_heatmap, name = "Gene expression",
+    show_column_names = FALSE,
+    top_annotation = heatmap_annotation, 
+    clustering_distance_columns = "pearson"
+  )
 ```
 
 ```{r}
-se_PCA %>% pivot_sample() %>% 
-  ggplot(aes(x = PC1, y = PC2, color = condition)) +
-  geom_text(aes(label = timepoint)) +
-  theme_bw() +
-  coord_equal() 
+svg("figure/heatmap.svg", width = 7, height = 15)
+draw(heatmap)
+dev.off()
 ```
 
-**D7: treatment vs. Control** (Anakinra vs. PBS)
+![](figure/heatmap.png){fig-align="center"}
 
-D14: treatment vs., control (Anakinra vs. PBS - late)
 
-Control d14 vs. d7 (Effect of sensitize )
+```{r boxplot}
 
-Treatment d14 vs. d7
+```
+
+
+## DEG analysis
+
+### D7-treat vs. ctrl (Anakinra vs. PBS)
+
+```{r D7 - treat vs. ctrl}
+library(DESeq2)
+se_d7 <- se_abundant_scale[rowData(se_abundant_scale)$.abundant, 
+                           se_abundant_scale$timepoint == "D7"]
+
+
+dds_d7 <- 
+  DESeqDataSet(se_d7, design = ~ condition)
+dds_d7 <- 
+  DESeq(dds_d7)
+res_d7 <- 
+  lfcShrink(dds_d7, coef = "condition_treatment_vs_control", type = "apeglm")
+
+res_d7_all <- 
+  res_d7 %>% as_tibble(rownames = "gene_name") %>% 
+  arrange(-log2FoldChange)
+
+readr::write_csv(res_d7_all, "../data/DEG_D7_treat_vs_ctrl_all.csv")
+
+res_d7_sig <- 
+  res_d7_all %>% filter(abs(log2FoldChange) > 1, padj < .05)
+readr::write_csv(res_d7_sig, "../data/DEG_D7_treat_vs_ctrl_sig.csv")
+```
+
+### D14: treatment vs. control (Anakinra vs. PBS - late)
+
+```{r D14 - treat vs. ctrl}
+se_d14 <- se_abundant_scale[rowData(se_abundant_scale)$.abundant, 
+                            se_abundant_scale$timepoint == "D14"]
+dds_d14 <- 
+  DESeqDataSet(se_d14, design = ~ condition)
+dds_d14 <- 
+  DESeq(dds_d14)
+res_d14 <- 
+  lfcShrink(dds_d14, 
+            coef = "condition_treatment_vs_control", 
+            type = "apeglm")
+
+res_d14_all <- 
+  res_d14 %>% as_tibble(rownames = "gene_name") %>% 
+  arrange(-log2FoldChange)
+readr::write_csv(res_d14_all, "../data/DEG_D14_treat_vs_ctrl_all.csv")
+
+res_d14_sig <- 
+  res_d14_all %>% filter(abs(log2FoldChange) > 1, padj < .05)
+
+readr::write_csv(res_d14_sig, "../data/DEG_D14_treat_vs_ctrl_sig.csv")
+```
+
+## Pooling: Treat vs. Ctrl
+
+```{r pooling - treat vs. ctrl}
+se_pooling <- se_abundant_scale[rowData(se_abundant_scale)$.abundant, ]
+
+dds_pooling <- 
+  DESeqDataSet(se_pooling, design = ~ condition)
+
+dds_pooling <- 
+  DESeq(dds_pooling)
+
+res_pooling <- 
+  lfcShrink(dds_pooling, 
+            coef = "condition_treatment_vs_control", 
+            type = "apeglm")
+
+res_pooling_all <- 
+  res_pooling %>% as_tibble(rownames = "gene_name") %>% 
+  arrange(-log2FoldChange)
+readr::write_csv(res_pooling_all, "../data/DEG_pooling_treat_vs_ctrl_all.csv")
+
+res_pooling_sig <- 
+  res_pooling_all %>% filter(abs(log2FoldChange) > 1, padj < .05)
+
+readr::write_csv(res_pooling_sig, "../data/DEG_pooling_treat_vs_ctrl_sig.csv")
+```
+
+
+### Control: d14 vs. d7 (Effect of sensitize)
+
+```{r}
+se_ctrl <- se_abundant_scale[, se_abundant_scale$condition == "control"]
+dds_ctrl <- 
+  DESeqDataSet(se_ctrl, design = ~ timepoint)
+dds_ctrl <- 
+  DESeq(dds_ctrl)
+res_ctrl <- 
+  lfcShrink(dds_ctrl,
+            coef = "timepoint_D14_vs_D7",
+            type = "apeglm")
+
+res_ctrl_sig <- 
+  res_ctrl %>% as_tibble(rownames = "gene_name") %>% 
+  filter(abs(log2FoldChange) > 1, padj < .1) %>% arrange(-log2FoldChange)
+
+res_ctrl_sig %>% 
+  knitr::kable()
+
+```
+
+### Treatment: d14 vs. d7
+
+```{r}
+se_treat <- se_abundant_scale[, se_abundant_scale$condition == "treatment"]
+dds_treat <- 
+  DESeqDataSet(se_treat, design = ~ timepoint)
+dds_treat <- 
+  DESeq(dds_treat)
+res_treat <- 
+  lfcShrink(dds_treat,
+            coef = "timepoint_D14_vs_D7",
+            type = "apeglm")
+
+res_treat_sig <- 
+  res_treat %>% as_tibble(rownames = "gene_name") %>% 
+  filter(abs(log2FoldChange) > 1, padj < .05) %>% 
+  arrange(-log2FoldChange)
+
+res_treat_sig %>% 
+  knitr::kable()
+```
+
+### Summary
+
+```{r Summary}
+
+bind_rows(
+  res_d7_sig %>% mutate(contrast = "D7 treat vs. ctrl"),
+  res_d14_sig %>% mutate(contrast = "D14 treat vs. ctrl"),
+  res_treat_sig %>% mutate(contrast = "Treat D14 vs. D7"),
+  res_ctrl_sig %>% mutate(contrast = "Ctrl D14 vs. D7")
+) %>% 
+  group_by(contrast) %>% 
+  summarise(`No. Gene Diff. Expr.` = n()) %>% 
+  arrange(`No. Gene Diff. Expr.`) %>% 
+  knitr::kable()
+```
+
+## Expression
+
+```{r}
+library(ggpubr)
+g_selected <- 
+  se_abundant_scale[c("Il1b", "Il17a", "Ifng"), ] %>% 
+  as_tibble() %>% 
+  mutate(count_scaled = count_scaled + 1) %>% 
+  ggboxplot(x = "condition", y = "count_scaled", 
+            yscale = "log2", format.scale = T,
+            facet.by = c(".feature", "timepoint")) +
+  stat_compare_means(method = "t.test", vjust = 1) +
+  theme_bw()
+ggsave("figure/g_selected.jpg", g_selected, dpi = 600)  
+```
+
+## To-do
+
+filter out pseudo genes
+
+[GOBP_INTERLEUKIN_1_MEDIATED_SIGNALI\
+NG_PATHWAY](https://www.gsea-msigdb.org/gsea/msigdb/human/geneset/GOBP_INTERLEUKIN_1_MEDIATED_SIGNALING_PATHWAY.html)
+
+Type I, II interferon
+
+Il17
+
+[GOBP_ALPHA_BETA_T_CELL_ACTIVATION](https://www.gsea-msigdb.org/gsea/msigdb/human/geneset/GOBP_ALPHA_BETA_T_CELL_ACTIVATION.html)\
+
+
+[GOBP_ALPHA_BETA_T_CELL_DIFFERENTIAT\
+ION](https://www.gsea-msigdb.org/gsea/msigdb/human/geneset/GOBP_ALPHA_BETA_T_CELL_DIFFERENTIATION.html)\
+
+[GOBP_ALPHA_BETA_T_CELL_PROLIFERATIO\
+N](https://www.gsea-msigdb.org/gsea/msigdb/human/geneset/GOBP_ALPHA_BETA_T_CELL_PROLIFERATION.html)
+
+### Treatment vs. Ctrl (timepoint-controlled)
+
+### Treatment vs. Ctrl (timepoint-not-controlled)
+
+Il1b
+
+Il17a
+
+Ifng
+
+## Only use D17

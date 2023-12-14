@@ -102,7 +102,14 @@ se <-
     colData = meta_data
   )
 
-saveRDS(se, "../data/se.rds")
+# remove pseudo genes
+g_pseudo <- 
+  row_data %>% as_tibble(rownames = "gene_name") %>% 
+  filter(description %>% stringr::str_detect("pseudogene|predicted")) %>% 
+  pull(gene_name)
+
+se_nonpseudo_nonpredicted <- se[!rownames(se) %in% g_pseudo, ]
+saveRDS(se_nonpseudo_nonpredicted, "../data/se.rds")
 ```
 
 ## Sanity check
