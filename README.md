@@ -1,2 +1,3 @@
-# kelvin
-collaboration with kelvin bulk RNA-seq
+# kineretACD
+
+collaboration with kelvin on bulk RNA-seq
