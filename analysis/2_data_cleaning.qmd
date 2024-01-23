@@ -42,7 +42,6 @@ colnames(count)[2:9] <- se_d14 %>% colData() %>% as_tibble() %>% group_by(condit
 readr::write_csv(count, "../data/count_d14.csv")
 ```
 
-
 ```{r pca-calculation}
 se_PCA <- se_abundant_scale %>% 
   reduce_dimensions(method = "PCA", top = 1000)
@@ -153,11 +152,9 @@ dev.off()
 
 ![](figure/heatmap.png){fig-align="center"}
 
-
 ```{r boxplot}
 
 ```
-
 
 ## DEG analysis
 
@@ -238,7 +235,6 @@ res_pooling_sig <-
 
 readr::write_csv(res_pooling_sig, "../data/DEG_pooling_treat_vs_ctrl_sig.csv")
 ```
-
 
 ### Control: d14 vs. d7 (Effect of sensitize)
 
@@ -328,7 +324,6 @@ Type I, II interferon
 Il17
 
 [GOBP_ALPHA_BETA_T_CELL_ACTIVATION](https://www.gsea-msigdb.org/gsea/msigdb/human/geneset/GOBP_ALPHA_BETA_T_CELL_ACTIVATION.html)\
-
 
 [GOBP_ALPHA_BETA_T_CELL_DIFFERENTIAT\
 ION](https://www.gsea-msigdb.org/gsea/msigdb/human/geneset/GOBP_ALPHA_BETA_T_CELL_DIFFERENTIATION.html)\
